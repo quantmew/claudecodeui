@@ -146,6 +146,7 @@ export function useChatRealtimeHandlers({
       'cursor-error',
       'codex-error',
       'gemini-error',
+      'ripperdoc-error',
     ]);
 
     const isClaudeSystemInit =
@@ -178,7 +179,8 @@ export function useChatRealtimeHandlers({
       (latestMessage.type === 'claude-error' ||
         latestMessage.type === 'cursor-error' ||
         latestMessage.type === 'codex-error' ||
-        latestMessage.type === 'gemini-error');
+        latestMessage.type === 'gemini-error' ||
+        latestMessage.type === 'ripperdoc-error');
 
     const handleBackgroundLifecycle = (sessionId?: string) => {
       if (!sessionId) {
@@ -944,6 +946,19 @@ export function useChatRealtimeHandlers({
           {
             type: 'error',
             content: latestMessage.error || 'An error occurred with Gemini',
+            timestamp: new Date(),
+          },
+        ]);
+        break;
+
+      case 'ripperdoc-error':
+        setIsLoading(false);
+        setCanAbortSession(false);
+        setChatMessages((previous) => [
+          ...previous,
+          {
+            type: 'error',
+            content: latestMessage.error || 'An error occurred with Ripperdoc',
             timestamp: new Date(),
           },
         ]);

@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
 import matter from 'gray-matter';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS, RIPPERDOC_MODELS } from '../../shared/modelConstants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -187,7 +187,9 @@ Custom commands can be created in:
     const availableModels = {
       claude: CLAUDE_MODELS.OPTIONS.map(o => o.value),
       cursor: CURSOR_MODELS.OPTIONS.map(o => o.value),
-      codex: CODEX_MODELS.OPTIONS.map(o => o.value)
+      codex: CODEX_MODELS.OPTIONS.map(o => o.value),
+      gemini: GEMINI_MODELS.OPTIONS.map(o => o.value),
+      ripperdoc: RIPPERDOC_MODELS.OPTIONS.map(o => o.value),
     };
 
     const currentProvider = context?.provider || 'claude';
@@ -218,6 +220,10 @@ Custom commands can be created in:
         ? CURSOR_MODELS.DEFAULT
         : provider === 'codex'
           ? CODEX_MODELS.DEFAULT
+          : provider === 'gemini'
+            ? GEMINI_MODELS.DEFAULT
+          : provider === 'ripperdoc'
+            ? RIPPERDOC_MODELS.DEFAULT
           : CLAUDE_MODELS.DEFAULT);
 
     const used = Number(tokenUsage.used ?? tokenUsage.totalUsed ?? tokenUsage.total_tokens ?? 0) || 0;

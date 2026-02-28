@@ -44,11 +44,12 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache, getRipperdocSessionMessages, deleteRipperdocSession } from './projects.js';
 import { queryClaudeSDK, abortClaudeSDKSession, isClaudeSDKSessionActive, getActiveClaudeSDKSessions, resolveToolApproval } from './claude-sdk.js';
 import { spawnCursor, abortCursorSession, isCursorSessionActive, getActiveCursorSessions } from './cursor-cli.js';
 import { queryCodex, abortCodexSession, isCodexSessionActive, getActiveCodexSessions } from './openai-codex.js';
 import { spawnGemini, abortGeminiSession, isGeminiSessionActive, getActiveGeminiSessions } from './gemini-cli.js';
+import { spawnRipperdoc, abortRipperdocSession, isRipperdocSessionActive, getActiveRipperdocSessions } from './ripperdoc-cli.js';
 import sessionManager from './sessionManager.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -64,6 +65,7 @@ import cliAuthRoutes from './routes/cli-auth.js';
 import userRoutes from './routes/user.js';
 import codexRoutes from './routes/codex.js';
 import geminiRoutes from './routes/gemini.js';
+import ripperdocRoutes from './routes/ripperdoc.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -74,7 +76,8 @@ const PROVIDER_WATCH_PATHS = [
     { provider: 'cursor', rootPath: path.join(os.homedir(), '.cursor', 'chats') },
     { provider: 'codex', rootPath: path.join(os.homedir(), '.codex', 'sessions') },
     { provider: 'gemini', rootPath: path.join(os.homedir(), '.gemini', 'projects') },
-    { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') }
+    { provider: 'gemini_sessions', rootPath: path.join(os.homedir(), '.gemini', 'sessions') },
+    { provider: 'ripperdoc', rootPath: path.join(os.homedir(), '.ripperdoc', 'sessions') }
 ];
 const WATCHER_IGNORED_PATTERNS = [
     '**/node_modules/**',
@@ -387,6 +390,9 @@ app.use('/api/codex', authenticateToken, codexRoutes);
 // Gemini API Routes (protected)
 app.use('/api/gemini', authenticateToken, geminiRoutes);
 
+// Ripperdoc API Routes (protected)
+app.use('/api/ripperdoc', authenticateToken, ripperdocRoutes);
+
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
@@ -503,11 +509,22 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
 app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateToken, async (req, res) => {
     try {
         const { projectName, sessionId } = req.params;
-        const { limit, offset } = req.query;
+        const { limit, offset, provider = 'claude' } = req.query;
 
         // Parse limit and offset if provided
         const parsedLimit = limit ? parseInt(limit, 10) : null;
         const parsedOffset = offset ? parseInt(offset, 10) : 0;
+
+        if (provider === 'ripperdoc') {
+            const projectPath = await extractProjectDirectory(projectName);
+            const result = await getRipperdocSessionMessages(
+                sessionId,
+                projectPath,
+                parsedLimit,
+                parsedOffset
+            );
+            return res.json(result);
+        }
 
         const result = await getSessionMessages(projectName, sessionId, parsedLimit, parsedOffset);
 
@@ -539,8 +556,14 @@ app.put('/api/projects/:projectName/rename', authenticateToken, async (req, res)
 app.delete('/api/projects/:projectName/sessions/:sessionId', authenticateToken, async (req, res) => {
     try {
         const { projectName, sessionId } = req.params;
+        const provider = req.query.provider || 'claude';
         console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
-        await deleteSession(projectName, sessionId);
+        if (provider === 'ripperdoc') {
+            const projectPath = await extractProjectDirectory(projectName);
+            await deleteRipperdocSession(sessionId, projectPath);
+        } else {
+            await deleteSession(projectName, sessionId);
+        }
         console.log(`[API] Session ${sessionId} deleted successfully`);
         res.json({ success: true });
     } catch (error) {
@@ -968,6 +991,12 @@ function handleChatConnection(ws) {
                 console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
                 console.log('🤖 Model:', data.options?.model || 'default');
                 await spawnGemini(data.command, data.options, writer);
+            } else if (data.type === 'ripperdoc-command') {
+                console.log('[DEBUG] Ripperdoc message:', data.command || '[Continue/Resume]');
+                console.log('📁 Project:', data.options?.projectPath || data.options?.cwd || 'Unknown');
+                console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+                console.log('🤖 Model:', data.options?.model || 'default');
+                await spawnRipperdoc(data.command, data.options, writer);
             } else if (data.type === 'cursor-resume') {
                 // Backward compatibility: treat as cursor-command with resume and no prompt
                 console.log('[DEBUG] Cursor resume session (compat):', data.sessionId);
@@ -987,6 +1016,8 @@ function handleChatConnection(ws) {
                     success = abortCodexSession(data.sessionId);
                 } else if (provider === 'gemini') {
                     success = abortGeminiSession(data.sessionId);
+                } else if (provider === 'ripperdoc') {
+                    success = abortRipperdocSession(data.sessionId);
                 } else {
                     // Use Claude Agents SDK
                     success = await abortClaudeSDKSession(data.sessionId);
@@ -1031,6 +1062,8 @@ function handleChatConnection(ws) {
                     isActive = isCodexSessionActive(sessionId);
                 } else if (provider === 'gemini') {
                     isActive = isGeminiSessionActive(sessionId);
+                } else if (provider === 'ripperdoc') {
+                    isActive = isRipperdocSessionActive(sessionId);
                 } else {
                     // Use Claude Agents SDK
                     isActive = isClaudeSDKSessionActive(sessionId);
@@ -1048,7 +1081,8 @@ function handleChatConnection(ws) {
                     claude: getActiveClaudeSDKSessions(),
                     cursor: getActiveCursorSessions(),
                     codex: getActiveCodexSessions(),
-                    gemini: getActiveGeminiSessions()
+                    gemini: getActiveGeminiSessions(),
+                    ripperdoc: getActiveRipperdocSessions()
                 };
                 writer.send({
                     type: 'active-sessions',
@@ -1157,7 +1191,16 @@ function handleShellConnection(ws) {
                 if (isPlainShell) {
                     welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
                 } else {
-                    const providerName = provider === 'cursor' ? 'Cursor' : (provider === 'codex' ? 'Codex' : (provider === 'gemini' ? 'Gemini' : 'Claude'));
+                    const providerName =
+                        provider === 'cursor'
+                            ? 'Cursor'
+                            : provider === 'codex'
+                                ? 'Codex'
+                                : provider === 'gemini'
+                                    ? 'Gemini'
+                                    : provider === 'ripperdoc'
+                                        ? 'Ripperdoc'
+                                        : 'Claude';
                     welcomeMsg = hasSession ?
                         `\x1b[36mResuming ${providerName} session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
                         `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
@@ -1238,6 +1281,22 @@ function handleShellConnection(ws) {
                         } else {
                             if (hasSession && resumeId) {
                                 shellCommand = `cd "${projectPath}" && ${command} --resume "${resumeId}"`;
+                            } else {
+                                shellCommand = `cd "${projectPath}" && ${command}`;
+                            }
+                        }
+                    } else if (provider === 'ripperdoc') {
+                        // Use ripperdoc command
+                        const command = initialCommand || 'ripperdoc';
+                        if (os.platform() === 'win32') {
+                            if (hasSession && sessionId) {
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${command} --resume "${sessionId}"`;
+                            } else {
+                                shellCommand = `Set-Location -Path "${projectPath}"; ${command}`;
+                            }
+                        } else {
+                            if (hasSession && sessionId) {
+                                shellCommand = `cd "${projectPath}" && ${command} --resume "${sessionId}"`;
                             } else {
                                 shellCommand = `cd "${projectPath}" && ${command}`;
                             }
@@ -1706,6 +1765,28 @@ app.get('/api/projects/:projectName/sessions/:sessionId/token-usage', authentica
                 unsupported: true,
                 message: 'Token usage tracking not available for Gemini sessions'
             });
+        }
+
+        if (provider === 'ripperdoc') {
+            let projectPath;
+            try {
+                projectPath = await extractProjectDirectory(projectName);
+            } catch (error) {
+                return res.status(500).json({ error: 'Failed to determine project path' });
+            }
+
+            const ripperdocResult = await getRipperdocSessionMessages(
+                safeSessionId,
+                projectPath,
+                1,
+                0
+            );
+
+            if (!ripperdocResult || !ripperdocResult.tokenUsage) {
+                return res.status(404).json({ error: 'Ripperdoc session token usage not found', sessionId: safeSessionId });
+            }
+
+            return res.json(ripperdocResult.tokenUsage);
         }
 
         // Handle Codex sessions

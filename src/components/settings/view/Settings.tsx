@@ -40,9 +40,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setClaudePermissions,
     cursorPermissions,
     setCursorPermissions,
+    ripperdocPermissions,
+    setRipperdocPermissions,
     codexPermissionMode,
     setCodexPermissionMode,
     mcpServers,
+    ripperdocMcpServers,
     cursorMcpServers,
     codexMcpServers,
     mcpTestResults,
@@ -56,6 +59,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     handleMcpDelete,
     handleMcpTest,
     handleMcpToolsDiscovery,
+    showRipperdocMcpForm,
+    editingRipperdocMcpServer,
+    openRipperdocMcpForm,
+    closeRipperdocMcpForm,
+    submitRipperdocMcpForm,
+    handleRipperdocMcpDelete,
     showCodexMcpForm,
     editingCodexMcpServer,
     openCodexMcpForm,
@@ -66,6 +75,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     cursorAuthStatus,
     codexAuthStatus,
     geminiAuthStatus,
+    ripperdocAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
     openLoginForProvider,
@@ -92,7 +102,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
       ? cursorAuthStatus.authenticated
       : loginProvider === 'codex'
         ? codexAuthStatus.authenticated
-        : false;
+        : loginProvider === 'ripperdoc'
+          ? ripperdocAuthStatus.authenticated
+          : false;
 
   return (
     <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[9999] md:p-4 bg-background/95">
@@ -137,19 +149,24 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 cursorAuthStatus={cursorAuthStatus}
                 codexAuthStatus={codexAuthStatus}
                 geminiAuthStatus={geminiAuthStatus}
+                ripperdocAuthStatus={ripperdocAuthStatus}
                 onClaudeLogin={() => openLoginForProvider('claude')}
                 onCursorLogin={() => openLoginForProvider('cursor')}
                 onCodexLogin={() => openLoginForProvider('codex')}
                 onGeminiLogin={() => openLoginForProvider('gemini')}
+                onRipperdocLogin={() => {}}
                 claudePermissions={claudePermissions}
                 onClaudePermissionsChange={setClaudePermissions}
                 cursorPermissions={cursorPermissions}
                 onCursorPermissionsChange={setCursorPermissions}
+                ripperdocPermissions={ripperdocPermissions}
+                onRipperdocPermissionsChange={setRipperdocPermissions}
                 codexPermissionMode={codexPermissionMode}
                 onCodexPermissionModeChange={setCodexPermissionMode}
                 geminiPermissionMode={geminiPermissionMode}
                 onGeminiPermissionModeChange={setGeminiPermissionMode}
                 mcpServers={mcpServers}
+                ripperdocMcpServers={ripperdocMcpServers}
                 cursorMcpServers={cursorMcpServers}
                 codexMcpServers={codexMcpServers}
                 mcpTestResults={mcpTestResults}
@@ -157,6 +174,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 mcpToolsLoading={mcpToolsLoading}
                 onOpenMcpForm={openMcpForm}
                 onDeleteMcpServer={handleMcpDelete}
+                onOpenRipperdocMcpForm={openRipperdocMcpForm}
+                onDeleteRipperdocMcpServer={handleRipperdocMcpDelete}
                 onTestMcpServer={handleMcpTest}
                 onDiscoverMcpTools={handleMcpToolsDiscovery}
                 onOpenCodexMcpForm={openCodexMcpForm}
@@ -241,6 +260,14 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         projects={projects}
         onClose={closeMcpForm}
         onSubmit={submitMcpForm}
+      />
+
+      <ClaudeMcpFormModal
+        isOpen={showRipperdocMcpForm}
+        editingServer={editingRipperdocMcpServer}
+        projects={projects}
+        onClose={closeRipperdocMcpForm}
+        onSubmit={submitRipperdocMcpForm}
       />
 
       <CodexMcpFormModal

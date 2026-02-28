@@ -21,6 +21,7 @@ import type {
   McpToolsResult,
   McpTestResult,
   ProjectSortOrder,
+  RipperdocPermissionsState,
   SettingsMainTab,
   SettingsProject,
 } from '../types/types';
@@ -56,10 +57,24 @@ type McpReadResponse = {
 type McpCliServer = {
   name: string;
   type?: string;
+  transport?: string;
+  scope?: string;
+  projectPath?: string;
+  config?: {
+    type?: string;
+    transport?: string;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    url?: string;
+    uri?: string;
+    headers?: Record<string, string>;
+  };
   command?: string;
   args?: string[];
   env?: Record<string, string>;
   url?: string;
+  uri?: string;
   headers?: Record<string, string>;
 };
 
@@ -93,6 +108,12 @@ type CursorSettingsStorage = {
 
 type CodexSettingsStorage = {
   permissionMode?: CodexPermissionMode;
+};
+
+type RipperdocSettingsStorage = {
+  allowedTools?: string[];
+  disallowedTools?: string[];
+  skipPermissions?: boolean;
 };
 
 type ActiveLoginProvider = AgentProvider | '';
@@ -142,16 +163,17 @@ const readCodeEditorSettings = (): CodeEditorSettingsState => ({
 
 const mapCliServersToMcpServers = (servers: McpCliServer[] = []): McpServer[] => (
   servers.map((server) => ({
-    id: server.name,
+    id: (server.scope === 'local' || server.scope === 'project') ? `local:${server.name}` : server.name,
     name: server.name,
-    type: server.type || 'stdio',
-    scope: 'user',
+    type: server.type || server.transport || server.config?.type || server.config?.transport || 'stdio',
+    scope: (server.scope === 'local' || server.scope === 'project') ? 'local' : 'user',
+    projectPath: server.projectPath || undefined,
     config: {
-      command: server.command || '',
-      args: server.args || [],
-      env: server.env || {},
-      url: server.url || '',
-      headers: server.headers || {},
+      command: server.command || server.config?.command || '',
+      args: server.args || server.config?.args || [],
+      env: server.env || server.config?.env || {},
+      url: server.url || server.uri || server.config?.url || server.config?.uri || '',
+      headers: server.headers || server.config?.headers || {},
       timeout: 30000,
     },
     created: new Date().toISOString(),
@@ -185,6 +207,12 @@ const createEmptyCursorPermissions = (): CursorPermissionsState => ({
   ...DEFAULT_CURSOR_PERMISSIONS,
 });
 
+const createEmptyRipperdocPermissions = (): RipperdocPermissionsState => ({
+  allowedTools: [],
+  disallowedTools: [],
+  skipPermissions: false,
+});
+
 export function useSettingsController({ isOpen, initialTab, projects, onClose }: UseSettingsControllerArgs) {
   const { isDarkMode, toggleDarkMode } = useTheme() as ThemeContextValue;
   const closeTimerRef = useRef<number | null>(null);
@@ -204,10 +232,14 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   const [cursorPermissions, setCursorPermissions] = useState<CursorPermissionsState>(() => (
     createEmptyCursorPermissions()
   ));
+  const [ripperdocPermissions, setRipperdocPermissions] = useState<RipperdocPermissionsState>(() => (
+    createEmptyRipperdocPermissions()
+  ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
   const [geminiPermissionMode, setGeminiPermissionMode] = useState<GeminiPermissionMode>('default');
 
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [ripperdocMcpServers, setRipperdocMcpServers] = useState<McpServer[]>([]);
   const [cursorMcpServers, setCursorMcpServers] = useState<McpServer[]>([]);
   const [codexMcpServers, setCodexMcpServers] = useState<McpServer[]>([]);
   const [mcpTestResults, setMcpTestResults] = useState<Record<string, McpTestResult>>({});
@@ -216,6 +248,8 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
 
   const [showMcpForm, setShowMcpForm] = useState(false);
   const [editingMcpServer, setEditingMcpServer] = useState<McpServer | null>(null);
+  const [showRipperdocMcpForm, setShowRipperdocMcpForm] = useState(false);
+  const [editingRipperdocMcpServer, setEditingRipperdocMcpServer] = useState<McpServer | null>(null);
   const [showCodexMcpForm, setShowCodexMcpForm] = useState(false);
   const [editingCodexMcpServer, setEditingCodexMcpServer] = useState<McpServer | null>(null);
 
@@ -227,6 +261,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   const [cursorAuthStatus, setCursorAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
   const [codexAuthStatus, setCodexAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
   const [geminiAuthStatus, setGeminiAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
+  const [ripperdocAuthStatus, setRipperdocAuthStatus] = useState<AuthStatus>(DEFAULT_AUTH_STATUS);
 
   const setAuthStatusByProvider = useCallback((provider: AgentProvider, status: AuthStatus) => {
     if (provider === 'claude') {
@@ -241,6 +276,11 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
 
     if (provider === 'gemini') {
       setGeminiAuthStatus(status);
+      return;
+    }
+
+    if (provider === 'ripperdoc') {
+      setRipperdocAuthStatus(status);
       return;
     }
 
@@ -355,6 +395,34 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     }
   }, []);
 
+  const fetchRipperdocMcpServers = useCallback(async (projectPath?: string) => {
+    const query = projectPath ? `?projectPath=${encodeURIComponent(projectPath)}` : '';
+    try {
+      const configResponse = await authenticatedFetch(`/api/ripperdoc/mcp/config/read${query}`);
+      if (configResponse.ok) {
+        const configData = await toResponseJson<McpReadResponse>(configResponse);
+        if (configData.success && configData.servers) {
+          setRipperdocMcpServers(configData.servers);
+          return;
+        }
+      }
+
+      const cliResponse = await authenticatedFetch(`/api/ripperdoc/mcp/cli/list${query}`);
+      if (!cliResponse.ok) {
+        return;
+      }
+
+      const cliData = await toResponseJson<McpCliReadResponse>(cliResponse);
+      if (!cliData.success || !cliData.servers) {
+        return;
+      }
+
+      setRipperdocMcpServers(mapCliServersToMcpServers(cliData.servers));
+    } catch (error) {
+      console.error('Error fetching Ripperdoc MCP servers:', error);
+    }
+  }, []);
+
   const deleteMcpServer = useCallback(async (serverId: string, scope = 'user') => {
     const response = await authenticatedFetch(`/api/mcp/cli/remove/${serverId}?scope=${scope}`, {
       method: 'DELETE',
@@ -460,7 +528,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   );
 
   const handleMcpDelete = useCallback(
-    async (serverId: string, scope = 'user') => {
+    async (serverId: string, scope = 'user', _projectPath?: string) => {
       if (!window.confirm('Are you sure you want to delete this MCP server?')) {
         return;
       }
@@ -547,6 +615,138 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       }
     },
     [discoverMcpTools],
+  );
+
+  const deleteRipperdocMcpServer = useCallback(async (serverId: string, scope = 'user', projectPath?: string) => {
+    const normalizedScope = scope === 'local' ? 'project' : scope;
+    const searchParams = new URLSearchParams({ scope: normalizedScope });
+    if (normalizedScope === 'project' && projectPath) {
+      searchParams.set('projectPath', projectPath);
+    }
+
+    const response = await authenticatedFetch(`/api/ripperdoc/mcp/cli/remove/${encodeURIComponent(serverId)}?${searchParams.toString()}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await toResponseJson<JsonResult>(response);
+      throw new Error(error.error || 'Failed to delete Ripperdoc MCP server');
+    }
+
+    const result = await toResponseJson<JsonResult>(response);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to delete Ripperdoc MCP server via CLI');
+    }
+  }, []);
+
+  const saveRipperdocMcpServer = useCallback(
+    async (serverData: ClaudeMcpFormState, editingServer: McpServer | null) => {
+      const newServerScope = serverData.scope === 'local' ? 'project' : 'user';
+
+      const response = await authenticatedFetch('/api/ripperdoc/mcp/cli/add', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: serverData.name,
+          type: serverData.type,
+          scope: newServerScope,
+          projectPath: serverData.projectPath,
+          command: serverData.config.command,
+          args: serverData.config.args || [],
+          url: serverData.config.url,
+          headers: serverData.config.headers || {},
+          env: serverData.config.env || {},
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await toResponseJson<JsonResult>(response);
+        throw new Error(error.error || 'Failed to save Ripperdoc MCP server');
+      }
+
+      const result = await toResponseJson<JsonResult>(response);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save Ripperdoc MCP server via CLI');
+      }
+
+      if (!editingServer?.id) {
+        return;
+      }
+
+      const previousServerScope = editingServer.scope === 'local' ? 'project' : (editingServer.scope || 'user');
+      const previousProjectPath = editingServer.projectPath;
+      const didServerIdentityChange =
+        editingServer.id !== serverData.name || previousServerScope !== newServerScope;
+
+      if (!didServerIdentityChange) {
+        return;
+      }
+
+      try {
+        await deleteRipperdocMcpServer(editingServer.id, previousServerScope, previousProjectPath);
+      } catch (error) {
+        console.warn('Saved Ripperdoc MCP server update but failed to remove the previous server entry.', {
+          previousServerId: editingServer.id,
+          previousServerScope,
+          error: getErrorMessage(error),
+        });
+      }
+    },
+    [deleteRipperdocMcpServer],
+  );
+
+  const submitRipperdocMcpForm = useCallback(
+    async (formData: ClaudeMcpFormState, editingServer: McpServer | null) => {
+      if (formData.importMode === 'json') {
+        const response = await authenticatedFetch('/api/ripperdoc/mcp/cli/add-json', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: formData.name,
+            jsonConfig: formData.jsonInput,
+            scope: formData.scope === 'local' ? 'project' : 'user',
+            projectPath: formData.projectPath,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await toResponseJson<JsonResult>(response);
+          throw new Error(error.error || 'Failed to add Ripperdoc MCP server');
+        }
+
+        const result = await toResponseJson<JsonResult>(response);
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to add Ripperdoc MCP server via JSON');
+        }
+      } else {
+        await saveRipperdocMcpServer(formData, editingServer);
+      }
+
+      const refreshProjectPath = formData.scope === 'local' ? formData.projectPath : undefined;
+      await fetchRipperdocMcpServers(refreshProjectPath);
+      setSaveStatus('success');
+      setShowRipperdocMcpForm(false);
+      setEditingRipperdocMcpServer(null);
+    },
+    [fetchRipperdocMcpServers, saveRipperdocMcpServer],
+  );
+
+  const handleRipperdocMcpDelete = useCallback(
+    async (serverId: string, scope = 'user', projectPath?: string) => {
+      if (!window.confirm('Are you sure you want to delete this MCP server?')) {
+        return;
+      }
+
+      setDeleteError(null);
+      try {
+        await deleteRipperdocMcpServer(serverId, scope, projectPath);
+        await fetchRipperdocMcpServers(projectPath);
+        setDeleteError(null);
+        setSaveStatus('success');
+      } catch (error) {
+        setDeleteError(getErrorMessage(error));
+        setSaveStatus('error');
+      }
+    },
+    [deleteRipperdocMcpServer, fetchRipperdocMcpServers],
   );
 
   const deleteCodexMcpServer = useCallback(async (serverId: string) => {
@@ -669,8 +869,19 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       );
       setGeminiPermissionMode(savedGeminiSettings.permissionMode || 'default');
 
+      const savedRipperdocSettings = parseJson<RipperdocSettingsStorage>(
+        localStorage.getItem('ripperdoc-settings'),
+        {},
+      );
+      setRipperdocPermissions({
+        allowedTools: savedRipperdocSettings.allowedTools || [],
+        disallowedTools: savedRipperdocSettings.disallowedTools || [],
+        skipPermissions: Boolean(savedRipperdocSettings.skipPermissions),
+      });
+
       await Promise.all([
         fetchMcpServers(),
+        fetchRipperdocMcpServers(),
         fetchCursorMcpServers(),
         fetchCodexMcpServers(),
       ]);
@@ -678,10 +889,11 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
       console.error('Error loading settings:', error);
       setClaudePermissions(createEmptyClaudePermissions());
       setCursorPermissions(createEmptyCursorPermissions());
+      setRipperdocPermissions(createEmptyRipperdocPermissions());
       setCodexPermissionMode('default');
       setProjectSortOrder('name');
     }
-  }, [fetchCodexMcpServers, fetchCursorMcpServers, fetchMcpServers]);
+  }, [fetchCodexMcpServers, fetchCursorMcpServers, fetchMcpServers, fetchRipperdocMcpServers]);
 
   const openLoginForProvider = useCallback((provider: AgentProvider) => {
     setLoginProvider(provider);
@@ -729,6 +941,13 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
         lastUpdated: now,
       }));
 
+      localStorage.setItem('ripperdoc-settings', JSON.stringify({
+        allowedTools: ripperdocPermissions.allowedTools,
+        disallowedTools: ripperdocPermissions.disallowedTools,
+        skipPermissions: ripperdocPermissions.skipPermissions,
+        lastUpdated: now,
+      }));
+
       setSaveStatus('success');
       if (closeTimerRef.current !== null) {
         window.clearTimeout(closeTimerRef.current);
@@ -749,8 +968,12 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     cursorPermissions.allowedCommands,
     cursorPermissions.disallowedCommands,
     cursorPermissions.skipPermissions,
+    geminiPermissionMode,
     onClose,
     projectSortOrder,
+    ripperdocPermissions.allowedTools,
+    ripperdocPermissions.disallowedTools,
+    ripperdocPermissions.skipPermissions,
   ]);
 
   const updateCodeEditorSetting = useCallback(
@@ -768,6 +991,16 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
   const closeMcpForm = useCallback(() => {
     setShowMcpForm(false);
     setEditingMcpServer(null);
+  }, []);
+
+  const openRipperdocMcpForm = useCallback((server?: McpServer) => {
+    setEditingRipperdocMcpServer(server || null);
+    setShowRipperdocMcpForm(true);
+  }, []);
+
+  const closeRipperdocMcpForm = useCallback(() => {
+    setShowRipperdocMcpForm(false);
+    setEditingRipperdocMcpServer(null);
   }, []);
 
   const openCodexMcpForm = useCallback((server?: McpServer) => {
@@ -791,6 +1024,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     void checkAuthStatus('cursor');
     void checkAuthStatus('codex');
     void checkAuthStatus('gemini');
+    void checkAuthStatus('ripperdoc');
   }, [checkAuthStatus, initialTab, isOpen, loadSettings]);
 
   useEffect(() => {
@@ -825,9 +1059,12 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     setClaudePermissions,
     cursorPermissions,
     setCursorPermissions,
+    ripperdocPermissions,
+    setRipperdocPermissions,
     codexPermissionMode,
     setCodexPermissionMode,
     mcpServers,
+    ripperdocMcpServers,
     cursorMcpServers,
     codexMcpServers,
     mcpTestResults,
@@ -841,6 +1078,12 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     handleMcpDelete,
     handleMcpTest,
     handleMcpToolsDiscovery,
+    showRipperdocMcpForm,
+    editingRipperdocMcpServer,
+    openRipperdocMcpForm,
+    closeRipperdocMcpForm,
+    submitRipperdocMcpForm,
+    handleRipperdocMcpDelete,
     showCodexMcpForm,
     editingCodexMcpServer,
     openCodexMcpForm,
@@ -851,6 +1094,7 @@ export function useSettingsController({ isOpen, initialTab, projects, onClose }:
     cursorAuthStatus,
     codexAuthStatus,
     geminiAuthStatus,
+    ripperdocAuthStatus,
     geminiPermissionMode,
     setGeminiPermissionMode,
     openLoginForProvider,

@@ -48,6 +48,10 @@ export const getSessionDate = (session: SessionWithProvider): Date => {
     return new Date(session.createdAt || session.lastActivity || 0);
   }
 
+  if (session.__provider === 'ripperdoc') {
+    return new Date(session.lastActivity || session.updated_at || session.createdAt || 0);
+  }
+
   return new Date(session.lastActivity || session.createdAt || 0);
 };
 
@@ -64,6 +68,10 @@ export const getSessionName = (session: SessionWithProvider, t: TFunction): stri
     return session.summary || session.name || t('projects.newSession');
   }
 
+  if (session.__provider === 'ripperdoc') {
+    return session.summary || session.name || 'Ripperdoc Session';
+  }
+
   return session.summary || t('projects.newSession');
 };
 
@@ -74,6 +82,10 @@ export const getSessionTime = (session: SessionWithProvider): string => {
 
   if (session.__provider === 'codex') {
     return String(session.createdAt || session.lastActivity || '');
+  }
+
+  if (session.__provider === 'ripperdoc') {
+    return String(session.lastActivity || session.updated_at || session.createdAt || '');
   }
 
   return String(session.lastActivity || session.createdAt || '');
@@ -91,6 +103,7 @@ export const createSessionViewModel = (
     isCursorSession: session.__provider === 'cursor',
     isCodexSession: session.__provider === 'codex',
     isGeminiSession: session.__provider === 'gemini',
+    isRipperdocSession: session.__provider === 'ripperdoc',
     isActive: diffInMinutes < 10,
     sessionName: getSessionName(session, t),
     sessionTime: getSessionTime(session),
@@ -122,7 +135,12 @@ export const getAllSessions = (
     __provider: 'gemini' as const,
   }));
 
-  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions].sort(
+  const ripperdocSessions = (project.ripperdocSessions || []).map((session) => ({
+    ...session,
+    __provider: 'ripperdoc' as const,
+  }));
+
+  return [...claudeSessions, ...cursorSessions, ...codexSessions, ...geminiSessions, ...ripperdocSessions].sort(
     (a, b) => getSessionDate(b).getTime() - getSessionDate(a).getTime(),
   );
 };

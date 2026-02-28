@@ -4,6 +4,7 @@ import type {
   AgentCategory,
   ClaudePermissionsState,
   CursorPermissionsState,
+  RipperdocPermissionsState,
   CodexPermissionMode,
   GeminiPermissionMode,
   McpServer,
@@ -23,19 +24,24 @@ export type AgentsSettingsTabProps = {
   cursorAuthStatus: AuthStatus;
   codexAuthStatus: AuthStatus;
   geminiAuthStatus: AuthStatus;
+  ripperdocAuthStatus: AuthStatus;
   onClaudeLogin: () => void;
   onCursorLogin: () => void;
   onCodexLogin: () => void;
   onGeminiLogin: () => void;
+  onRipperdocLogin: () => void;
   claudePermissions: ClaudePermissionsState;
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
   cursorPermissions: CursorPermissionsState;
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
+  ripperdocPermissions: RipperdocPermissionsState;
+  onRipperdocPermissionsChange: (value: RipperdocPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   geminiPermissionMode: GeminiPermissionMode;
   onGeminiPermissionModeChange: (value: GeminiPermissionMode) => void;
   mcpServers: McpServer[];
+  ripperdocMcpServers: McpServer[];
   cursorMcpServers: McpServer[];
   codexMcpServers: McpServer[];
   mcpTestResults: Record<string, McpTestResult>;
@@ -43,7 +49,9 @@ export type AgentsSettingsTabProps = {
   mcpToolsLoading: Record<string, boolean>;
   deleteError: string | null;
   onOpenMcpForm: (server?: McpServer) => void;
-  onDeleteMcpServer: (serverId: string, scope?: string) => void;
+  onDeleteMcpServer: (serverId: string, scope?: string, projectPath?: string) => void;
+  onOpenRipperdocMcpForm: (server?: McpServer) => void;
+  onDeleteRipperdocMcpServer: (serverId: string, scope?: string, projectPath?: string) => void;
   onTestMcpServer: (serverId: string, scope?: string) => void;
   onDiscoverMcpTools: (serverId: string, scope?: string) => void;
   onOpenCodexMcpForm: (server?: McpServer) => void;
@@ -69,11 +77,14 @@ export type AgentCategoryContentSectionProps = {
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
   cursorPermissions: CursorPermissionsState;
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
+  ripperdocPermissions: RipperdocPermissionsState;
+  onRipperdocPermissionsChange: (value: RipperdocPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   geminiPermissionMode: GeminiPermissionMode;
   onGeminiPermissionModeChange: (value: GeminiPermissionMode) => void;
   mcpServers: McpServer[];
+  ripperdocMcpServers: McpServer[];
   cursorMcpServers: McpServer[];
   codexMcpServers: McpServer[];
   mcpTestResults: Record<string, McpTestResult>;
@@ -81,7 +92,9 @@ export type AgentCategoryContentSectionProps = {
   mcpToolsLoading: Record<string, boolean>;
   deleteError: string | null;
   onOpenMcpForm: (server?: McpServer) => void;
-  onDeleteMcpServer: (serverId: string, scope?: string) => void;
+  onDeleteMcpServer: (serverId: string, scope?: string, projectPath?: string) => void;
+  onOpenRipperdocMcpForm: (server?: McpServer) => void;
+  onDeleteRipperdocMcpServer: (serverId: string, scope?: string, projectPath?: string) => void;
   onTestMcpServer: (serverId: string, scope?: string) => void;
   onDiscoverMcpTools: (serverId: string, scope?: string) => void;
   onOpenCodexMcpForm: (server?: McpServer) => void;

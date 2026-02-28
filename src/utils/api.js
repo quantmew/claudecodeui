@@ -54,6 +54,9 @@ export const api = {
       params.append('limit', limit);
       params.append('offset', offset);
     }
+    if (provider === 'ripperdoc') {
+      params.append('provider', 'ripperdoc');
+    }
     const queryString = params.toString();
 
     let url;
@@ -73,8 +76,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ displayName }),
     }),
-  deleteSession: (projectName, sessionId) =>
-    authenticatedFetch(`/api/projects/${projectName}/sessions/${sessionId}`, {
+  deleteSession: (projectName, sessionId, provider = 'claude') =>
+    authenticatedFetch(`/api/projects/${projectName}/sessions/${sessionId}${provider === 'ripperdoc' ? '?provider=ripperdoc' : ''}`, {
       method: 'DELETE',
     }),
   deleteCodexSession: (sessionId) =>

@@ -10,8 +10,9 @@ import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 import { queryCodex } from '../openai-codex.js';
 import { spawnGemini } from '../gemini-cli.js';
+import { spawnRipperdoc } from '../ripperdoc-cli.js';
 import { Octokit } from '@octokit/rest';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS } from '../../shared/modelConstants.js';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, RIPPERDOC_MODELS } from '../../shared/modelConstants.js';
 import { IS_PLATFORM } from '../constants/config.js';
 
 const router = express.Router();
@@ -630,7 +631,7 @@ class ResponseCollector {
  *                          - Source for auto-generated branch names (if createBranch=true and no branchName)
  *                          - Fallback for PR title if no commits are made
  *
- * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'gemini'
+ * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'gemini' | 'ripperdoc'
  *                           Default: 'claude'
  *
  * @param {boolean} stream - (Optional) Enable Server-Sent Events (SSE) streaming for real-time updates.
@@ -646,6 +647,7 @@ class ResponseCollector {
  *                                       'gpt-5.1-codex', 'gpt-5.1-codex-high', 'gpt-5.1-codex-max',
  *                                       'gpt-5.1-codex-max-high', 'opus-4.1', 'grok', and thinking variants
  *                        Codex models: 'gpt-5.2' (default), 'gpt-5.1-codex-max', 'o3', 'o4-mini'
+ *                        Ripperdoc models: 'GLM-4.7' (default), 'deepseek-v3.2', and other configured model pointers
  *
  * @param {boolean} cleanup - (Optional) Auto-cleanup project directory after completion.
  *                           Default: true
@@ -748,7 +750,7 @@ class ResponseCollector {
  * Input Validations (400 Bad Request):
  *   - Either githubUrl OR projectPath must be provided (not neither)
  *   - message must be non-empty string
- *   - provider must be 'claude', 'cursor', 'codex', or 'gemini'
+ *   - provider must be 'claude', 'cursor', 'codex', 'gemini', or 'ripperdoc'
  *   - createBranch/createPR requires githubUrl OR projectPath (not neither)
  *   - branchName must pass Git naming rules (if provided)
  *
@@ -856,8 +858,8 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     return res.status(400).json({ error: 'message is required' });
   }
 
-  if (!['claude', 'cursor', 'codex', 'gemini'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "gemini"' });
+  if (!['claude', 'cursor', 'codex', 'gemini', 'ripperdoc'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "gemini", or "ripperdoc"' });
   }
 
   // Validate GitHub branch/PR creation requirements
@@ -981,6 +983,16 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         sessionId: null,
         model: model,
         skipPermissions: true // CLI mode bypasses permissions
+      }, writer);
+    } else if (provider === 'ripperdoc') {
+      console.log('🧠 Starting Ripperdoc CLI session');
+
+      await spawnRipperdoc(message.trim(), {
+        projectPath: finalProjectPath,
+        cwd: finalProjectPath,
+        sessionId: null,
+        model: model || RIPPERDOC_MODELS.DEFAULT,
+        permissionMode: 'bypassPermissions',
       }, writer);
     }
 

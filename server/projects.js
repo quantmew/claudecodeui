@@ -386,6 +386,7 @@ async function getProjects(progressCallback = null) {
   const projects = [];
   const existingProjects = new Set();
   const codexSessionsIndexRef = { sessionsByProject: null };
+  const ripperdocSessionsIndexRef = { sessionsByProject: null };
   let totalProjects = 0;
   let processedProjects = 0;
   let directories = [];
@@ -436,6 +437,7 @@ async function getProjects(progressCallback = null) {
         fullPath: fullPath,
         isCustomName: !!customName,
         sessions: [],
+        ripperdocSessions: [],
         geminiSessions: [],
         sessionMeta: {
           hasMore: false,
@@ -483,6 +485,16 @@ async function getProjects(progressCallback = null) {
       } catch (e) {
         console.warn(`Could not load Gemini sessions for project ${entry.name}:`, e.message);
         project.geminiSessions = [];
+      }
+
+      // Also fetch Ripperdoc sessions for this project
+      try {
+        project.ripperdocSessions = await getRipperdocSessions(actualProjectDir, {
+          indexRef: ripperdocSessionsIndexRef,
+        });
+      } catch (e) {
+        console.warn(`Could not load Ripperdoc sessions for project ${entry.name}:`, e.message);
+        project.ripperdocSessions = [];
       }
 
       // Add TaskMaster detection
@@ -552,6 +564,7 @@ async function getProjects(progressCallback = null) {
         isCustomName: !!projectConfig.displayName,
         isManuallyAdded: true,
         sessions: [],
+        ripperdocSessions: [],
         geminiSessions: [],
         sessionMeta: {
           hasMore: false,
@@ -582,6 +595,15 @@ async function getProjects(progressCallback = null) {
         project.geminiSessions = sessionManager.getProjectSessions(actualProjectDir) || [];
       } catch (e) {
         console.warn(`Could not load Gemini sessions for manual project ${projectName}:`, e.message);
+      }
+
+      // Try to fetch Ripperdoc sessions for manual projects too
+      try {
+        project.ripperdocSessions = await getRipperdocSessions(actualProjectDir, {
+          indexRef: ripperdocSessionsIndexRef,
+        });
+      } catch (e) {
+        console.warn(`Could not load Ripperdoc sessions for manual project ${projectName}:`, e.message);
       }
 
       // Add TaskMaster detection for manual projects
@@ -1182,6 +1204,19 @@ async function deleteProject(projectName, force = false) {
         console.warn('Failed to delete Codex sessions:', err.message);
       }
 
+      try {
+        const ripperdocSessions = await getRipperdocSessions(projectPath, { limit: 0 });
+        for (const session of ripperdocSessions) {
+          try {
+            await deleteRipperdocSession(session.id, projectPath);
+          } catch (err) {
+            console.warn(`Failed to delete Ripperdoc session ${session.id}:`, err.message);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to delete Ripperdoc sessions:', err.message);
+      }
+
       // Delete Cursor sessions directory if it exists
       try {
         const hash = crypto.createHash('md5').update(projectPath).digest('hex');
@@ -1248,7 +1283,8 @@ async function addProjectManually(projectPath, displayName = null) {
     displayName: displayName || await generateDisplayName(projectName, absolutePath),
     isManuallyAdded: true,
     sessions: [],
-    cursorSessions: []
+    cursorSessions: [],
+    ripperdocSessions: [],
   };
 }
 
@@ -1361,6 +1397,288 @@ async function getCursorSessions(projectPath) {
     console.error('Error fetching Cursor sessions:', error);
     return [];
   }
+}
+
+const RIPPERDOC_SESSIONS_DIR = path.join(os.homedir(), '.ripperdoc', 'sessions');
+
+async function buildRipperdocSessionsIndex() {
+  const sessionsByProject = new Map();
+
+  try {
+    await fs.access(RIPPERDOC_SESSIONS_DIR);
+  } catch (error) {
+    return sessionsByProject;
+  }
+
+  let projectEntries = [];
+  try {
+    projectEntries = await fs.readdir(RIPPERDOC_SESSIONS_DIR, { withFileTypes: true });
+  } catch (error) {
+    return sessionsByProject;
+  }
+
+  for (const entry of projectEntries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const projectStoreDir = path.join(RIPPERDOC_SESSIONS_DIR, entry.name);
+    const indexPath = path.join(projectStoreDir, '.session_index_v1.json');
+
+    let indexContent = null;
+    try {
+      indexContent = await fs.readFile(indexPath, 'utf8');
+    } catch (error) {
+      continue;
+    }
+
+    let indexData = null;
+    try {
+      indexData = JSON.parse(indexContent);
+    } catch (error) {
+      continue;
+    }
+
+    const projectPath = typeof indexData?.project_path === 'string' ? indexData.project_path : '';
+    const normalizedProjectPath = normalizeComparablePath(projectPath);
+    if (!normalizedProjectPath) {
+      continue;
+    }
+
+    const sessionsRaw = indexData?.sessions && typeof indexData.sessions === 'object'
+      ? indexData.sessions
+      : {};
+
+    const sessions = [];
+    for (const [sessionId, sessionInfo] of Object.entries(sessionsRaw)) {
+      if (!sessionId || typeof sessionInfo !== 'object' || !sessionInfo) {
+        continue;
+      }
+
+      const summary = sessionInfo.title || sessionInfo.last_prompt || 'Ripperdoc Session';
+      const createdAt = sessionInfo.created_at || null;
+      const updatedAt = sessionInfo.updated_at || createdAt || null;
+      const messageCount = Number(sessionInfo.message_count || 0);
+
+      sessions.push({
+        id: sessionId,
+        summary,
+        name: summary,
+        createdAt,
+        lastActivity: updatedAt,
+        messageCount,
+        cwd: projectPath,
+        provider: 'ripperdoc',
+        filePath: path.join(projectStoreDir, `${sessionId}.jsonl`),
+        totalInputTokens: Number(sessionInfo.total_input_tokens || 0),
+        totalOutputTokens: Number(sessionInfo.total_output_tokens || 0),
+        totalCacheReadTokens: Number(sessionInfo.total_cache_read_tokens || 0),
+        totalCacheCreationTokens: Number(sessionInfo.total_cache_creation_tokens || 0),
+      });
+    }
+
+    sessions.sort((a, b) => new Date(b.lastActivity || 0) - new Date(a.lastActivity || 0));
+    sessionsByProject.set(normalizedProjectPath, sessions);
+  }
+
+  return sessionsByProject;
+}
+
+async function getRipperdocSessions(projectPath, options = {}) {
+  const { limit = 5, indexRef = null } = options;
+
+  try {
+    const normalizedProjectPath = normalizeComparablePath(projectPath);
+    if (!normalizedProjectPath) {
+      return [];
+    }
+
+    if (indexRef && !indexRef.sessionsByProject) {
+      indexRef.sessionsByProject = await buildRipperdocSessionsIndex();
+    }
+
+    const sessionsByProject = indexRef?.sessionsByProject || await buildRipperdocSessionsIndex();
+    const sessions = sessionsByProject.get(normalizedProjectPath) || [];
+    return limit > 0 ? sessions.slice(0, limit) : [...sessions];
+  } catch (error) {
+    console.error('Error fetching Ripperdoc sessions:', error);
+    return [];
+  }
+}
+
+function normalizeRipperdocMessageContent(content) {
+  if (!Array.isArray(content)) {
+    return content;
+  }
+
+  return content.map((block) => {
+    if (!block || typeof block !== 'object') {
+      return block;
+    }
+
+    if (block.type !== 'tool_use' && block.type !== 'tool_result') {
+      return block;
+    }
+
+    const normalized = { ...block };
+    if (!normalized.id && normalized.tool_use_id) {
+      normalized.id = normalized.tool_use_id;
+    }
+    if (!normalized.tool_use_id && normalized.id) {
+      normalized.tool_use_id = normalized.id;
+    }
+    return normalized;
+  });
+}
+
+async function findRipperdocSessionEntry(sessionId, projectPath = null) {
+  const index = await buildRipperdocSessionsIndex();
+  if (projectPath) {
+    const normalizedProjectPath = normalizeComparablePath(projectPath);
+    const projectSessions = index.get(normalizedProjectPath) || [];
+    const exactMatch = projectSessions.find((session) => session.id === sessionId);
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  for (const sessions of index.values()) {
+    const match = sessions.find((session) => session.id === sessionId);
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
+}
+
+async function getRipperdocSessionMessages(sessionId, projectPath = null, limit = null, offset = 0) {
+  try {
+    const sessionEntry = await findRipperdocSessionEntry(sessionId, projectPath);
+    if (!sessionEntry?.filePath) {
+      return { messages: [], total: 0, hasMore: false };
+    }
+
+    let content = '';
+    try {
+      content = await fs.readFile(sessionEntry.filePath, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return { messages: [], total: 0, hasMore: false };
+      }
+      throw error;
+    }
+
+    const messages = [];
+    const lines = content.split('\n').filter((line) => line.trim());
+
+    for (const line of lines) {
+      let parsedLine = null;
+      try {
+        parsedLine = JSON.parse(line);
+      } catch (error) {
+        continue;
+      }
+
+      const payload = parsedLine?.payload;
+      if (!payload || typeof payload !== 'object') {
+        continue;
+      }
+
+      const message = payload.message;
+      if (!message || typeof message !== 'object') {
+        continue;
+      }
+
+      messages.push({
+        type: payload.type || 'assistant',
+        timestamp: parsedLine.logged_at || parsedLine.timestamp || null,
+        message: {
+          ...message,
+          content: normalizeRipperdocMessageContent(message.content),
+        },
+        parentToolUseId: payload.parent_tool_use_id || null,
+        toolUseResult: payload.tool_use_result || null,
+      });
+    }
+
+    messages.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+    const tokenUsage = {
+      used:
+        Number(sessionEntry.totalInputTokens || 0) +
+        Number(sessionEntry.totalOutputTokens || 0) +
+        Number(sessionEntry.totalCacheReadTokens || 0) +
+        Number(sessionEntry.totalCacheCreationTokens || 0),
+      total: Number.isFinite(parseInt(process.env.RIPPERDOC_CONTEXT_WINDOW || process.env.CONTEXT_WINDOW || '200000', 10))
+        ? parseInt(process.env.RIPPERDOC_CONTEXT_WINDOW || process.env.CONTEXT_WINDOW || '200000', 10)
+        : 200000,
+      breakdown: {
+        input: Number(sessionEntry.totalInputTokens || 0),
+        output: Number(sessionEntry.totalOutputTokens || 0),
+        cacheRead: Number(sessionEntry.totalCacheReadTokens || 0),
+        cacheCreation: Number(sessionEntry.totalCacheCreationTokens || 0),
+      },
+    };
+
+    const total = messages.length;
+    if (limit === null) {
+      return {
+        messages,
+        total,
+        hasMore: false,
+        offset: 0,
+        limit: total,
+        tokenUsage,
+      };
+    }
+
+    const startIndex = Math.max(0, total - offset - limit);
+    const endIndex = total - offset;
+    const paginatedMessages = messages.slice(startIndex, endIndex);
+    const hasMore = startIndex > 0;
+
+    return {
+      messages: paginatedMessages,
+      total,
+      hasMore,
+      offset,
+      limit,
+      tokenUsage,
+    };
+  } catch (error) {
+    console.error(`Error reading Ripperdoc session messages for ${sessionId}:`, error);
+    return { messages: [], total: 0, hasMore: false };
+  }
+}
+
+async function deleteRipperdocSession(sessionId, projectPath = null) {
+  const sessionEntry = await findRipperdocSessionEntry(sessionId, projectPath);
+  if (!sessionEntry?.filePath) {
+    throw new Error(`Ripperdoc session file not found for session ${sessionId}`);
+  }
+
+  try {
+    await fs.unlink(sessionEntry.filePath);
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  const indexPath = path.join(path.dirname(sessionEntry.filePath), '.session_index_v1.json');
+  try {
+    const raw = await fs.readFile(indexPath, 'utf8');
+    const indexData = JSON.parse(raw);
+    if (indexData.sessions && typeof indexData.sessions === 'object') {
+      delete indexData.sessions[sessionId];
+      await fs.writeFile(indexPath, JSON.stringify(indexData), 'utf8');
+    }
+  } catch (error) {
+    // Ignore index cleanup errors, watcher refresh will eventually reconcile.
+  }
+
+  return true;
 }
 
 
@@ -1839,5 +2157,8 @@ export {
   clearProjectDirectoryCache,
   getCodexSessions,
   getCodexSessionMessages,
-  deleteCodexSession
+  deleteCodexSession,
+  getRipperdocSessions,
+  getRipperdocSessionMessages,
+  deleteRipperdocSession
 };

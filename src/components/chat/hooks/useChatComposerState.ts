@@ -42,6 +42,7 @@ interface UseChatComposerStateArgs {
   claudeModel: string;
   codexModel: string;
   geminiModel: string;
+  ripperdocModel: string;
   isLoading: boolean;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
@@ -95,6 +96,7 @@ export function useChatComposerState({
   claudeModel,
   codexModel,
   geminiModel,
+  ripperdocModel,
   isLoading,
   canAbortSession,
   tokenBudget,
@@ -291,7 +293,16 @@ export function useChatComposerState({
           projectName: selectedProject.name,
           sessionId: currentSessionId,
           provider,
-          model: provider === 'cursor' ? cursorModel : provider === 'codex' ? codexModel : provider === 'gemini' ? geminiModel : claudeModel,
+          model:
+            provider === 'cursor'
+              ? cursorModel
+              : provider === 'codex'
+                ? codexModel
+                : provider === 'gemini'
+                  ? geminiModel
+                  : provider === 'ripperdoc'
+                    ? ripperdocModel
+                    : claudeModel,
           tokenUsage: tokenBudget,
         };
 
@@ -583,10 +594,12 @@ export function useChatComposerState({
           const settingsKey =
             provider === 'cursor'
               ? 'cursor-tools-settings'
-              : provider === 'codex'
-                ? 'codex-settings'
+                : provider === 'codex'
+                  ? 'codex-settings'
                 : provider === 'gemini'
                   ? 'gemini-settings'
+                  : provider === 'ripperdoc'
+                    ? 'ripperdoc-settings'
                   : 'claude-settings';
           const savedSettings = safeLocalStorage.getItem(settingsKey);
           if (savedSettings) {
@@ -650,6 +663,21 @@ export function useChatComposerState({
             toolsSettings,
           },
         });
+      } else if (provider === 'ripperdoc') {
+        sendMessage({
+          type: 'ripperdoc-command',
+          command: messageContent,
+          sessionId: effectiveSessionId,
+          options: {
+            cwd: resolvedProjectPath,
+            projectPath: resolvedProjectPath,
+            sessionId: effectiveSessionId,
+            resume: Boolean(effectiveSessionId),
+            model: ripperdocModel,
+            permissionMode,
+            toolsSettings,
+          },
+        });
       } else {
         sendMessage({
           type: 'claude-command',
@@ -690,6 +718,7 @@ export function useChatComposerState({
       cursorModel,
       executeCommand,
       geminiModel,
+      ripperdocModel,
       isLoading,
       onSessionActive,
       onSessionProcessing,

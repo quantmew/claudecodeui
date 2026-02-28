@@ -94,6 +94,26 @@ router.get('/gemini/status', async (req, res) => {
   }
 });
 
+router.get('/ripperdoc/status', async (req, res) => {
+  try {
+    const result = await checkRipperdocStatus();
+
+    res.json({
+      authenticated: result.authenticated,
+      email: result.email,
+      error: result.error
+    });
+
+  } catch (error) {
+    console.error('Error checking Ripperdoc status:', error);
+    res.status(500).json({
+      authenticated: false,
+      email: null,
+      error: error.message
+    });
+  }
+});
+
 /**
  * Checks Claude authentication credentials using two methods with priority order:
  *
@@ -372,6 +392,77 @@ async function checkGeminiCredentials() {
       error: 'Gemini CLI not configured'
     };
   }
+}
+
+function checkRipperdocStatus() {
+  return new Promise((resolve) => {
+    let processCompleted = false;
+
+    const timeout = setTimeout(() => {
+      if (!processCompleted) {
+        processCompleted = true;
+        if (childProcess) {
+          childProcess.kill();
+        }
+        resolve({
+          authenticated: false,
+          email: null,
+          error: 'Command timeout'
+        });
+      }
+    }, 5000);
+
+    let childProcess;
+    try {
+      childProcess = spawn('ripperdoc', ['--version']);
+    } catch (err) {
+      clearTimeout(timeout);
+      processCompleted = true;
+      resolve({
+        authenticated: false,
+        email: null,
+        error: 'Ripperdoc CLI not found or not installed'
+      });
+      return;
+    }
+
+    let stderr = '';
+    childProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    childProcess.on('close', (code) => {
+      if (processCompleted) return;
+      processCompleted = true;
+      clearTimeout(timeout);
+
+      if (code === 0) {
+        resolve({
+          authenticated: true,
+          email: 'CLI ready',
+          error: null
+        });
+      } else {
+        resolve({
+          authenticated: false,
+          email: null,
+          error: stderr || 'Ripperdoc CLI check failed'
+        });
+      }
+    });
+
+    childProcess.on('error', () => {
+      if (processCompleted) return;
+      processCompleted = true;
+      clearTimeout(timeout);
+
+      resolve({
+        authenticated: false,
+        email: null,
+        error: 'Ripperdoc CLI not found or not installed'
+      });
+    });
+  });
 }
 
 export default router;

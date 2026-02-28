@@ -10,19 +10,24 @@ export default function AgentsSettingsTab({
   cursorAuthStatus,
   codexAuthStatus,
   geminiAuthStatus,
+  ripperdocAuthStatus,
   onClaudeLogin,
   onCursorLogin,
   onCodexLogin,
   onGeminiLogin,
+  onRipperdocLogin,
   claudePermissions,
   onClaudePermissionsChange,
   cursorPermissions,
   onCursorPermissionsChange,
+  ripperdocPermissions,
+  onRipperdocPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
   geminiPermissionMode,
   onGeminiPermissionModeChange,
   mcpServers,
+  ripperdocMcpServers,
   cursorMcpServers,
   codexMcpServers,
   mcpTestResults,
@@ -31,6 +36,8 @@ export default function AgentsSettingsTab({
   deleteError,
   onOpenMcpForm,
   onDeleteMcpServer,
+  onOpenRipperdocMcpForm,
+  onDeleteRipperdocMcpServer,
   onTestMcpServer,
   onDiscoverMcpTools,
   onOpenCodexMcpForm,
@@ -56,15 +63,21 @@ export default function AgentsSettingsTab({
       authStatus: geminiAuthStatus,
       onLogin: onGeminiLogin,
     },
+    ripperdoc: {
+      authStatus: ripperdocAuthStatus,
+      onLogin: onRipperdocLogin,
+    },
   }), [
     claudeAuthStatus,
     codexAuthStatus,
     cursorAuthStatus,
     geminiAuthStatus,
+    ripperdocAuthStatus,
     onClaudeLogin,
     onCodexLogin,
     onCursorLogin,
     onGeminiLogin,
+    onRipperdocLogin,
   ]);
 
   return (
@@ -89,11 +102,14 @@ export default function AgentsSettingsTab({
           onClaudePermissionsChange={onClaudePermissionsChange}
           cursorPermissions={cursorPermissions}
           onCursorPermissionsChange={onCursorPermissionsChange}
+          ripperdocPermissions={ripperdocPermissions}
+          onRipperdocPermissionsChange={onRipperdocPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           geminiPermissionMode={geminiPermissionMode}
           onGeminiPermissionModeChange={onGeminiPermissionModeChange}
           mcpServers={mcpServers}
+          ripperdocMcpServers={ripperdocMcpServers}
           cursorMcpServers={cursorMcpServers}
           codexMcpServers={codexMcpServers}
           mcpTestResults={mcpTestResults}
@@ -102,6 +118,8 @@ export default function AgentsSettingsTab({
           deleteError={deleteError}
           onOpenMcpForm={onOpenMcpForm}
           onDeleteMcpServer={onDeleteMcpServer}
+          onOpenRipperdocMcpForm={onOpenRipperdocMcpForm}
+          onDeleteRipperdocMcpServer={onDeleteRipperdocMcpServer}
           onTestMcpServer={onTestMcpServer}
           onDiscoverMcpTools={onDiscoverMcpTools}
           onOpenCodexMcpForm={onOpenCodexMcpForm}

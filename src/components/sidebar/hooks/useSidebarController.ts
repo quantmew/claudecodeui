@@ -283,7 +283,7 @@ export function useSidebarController({
       } else if (provider === 'gemini') {
         response = await api.deleteGeminiSession(sessionId);
       } else {
-        response = await api.deleteSession(projectName, sessionId);
+        response = await api.deleteSession(projectName, sessionId, provider);
       }
 
       if (response.ok) {

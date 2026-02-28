@@ -66,6 +66,8 @@ function ChatInterface({
     setCodexModel,
     geminiModel,
     setGeminiModel,
+    ripperdocModel,
+    setRipperdocModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -177,6 +179,7 @@ function ChatInterface({
     claudeModel,
     codexModel,
     geminiModel,
+    ripperdocModel,
     isLoading,
     canAbortSession,
     tokenBudget,
@@ -256,6 +259,8 @@ function ChatInterface({
           ? t('messageTypes.codex')
           : provider === 'gemini'
             ? t('messageTypes.gemini')
+            : provider === 'ripperdoc'
+              ? t('messageTypes.ripperdoc', { defaultValue: 'Ripperdoc' })
             : t('messageTypes.claude');
 
     return (
@@ -294,6 +299,8 @@ function ChatInterface({
           setCodexModel={setCodexModel}
           geminiModel={geminiModel}
           setGeminiModel={setGeminiModel}
+          ripperdocModel={ripperdocModel}
+          setRipperdocModel={setRipperdocModel}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -384,6 +391,8 @@ function ChatInterface({
                   ? t('messageTypes.codex')
                   : provider === 'gemini'
                     ? t('messageTypes.gemini')
+                    : provider === 'ripperdoc'
+                      ? t('messageTypes.ripperdoc', { defaultValue: 'Ripperdoc' })
                     : t('messageTypes.claude'),
           })}
           isTextareaExpanded={isTextareaExpanded}

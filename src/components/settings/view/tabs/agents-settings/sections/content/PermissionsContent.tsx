@@ -51,7 +51,7 @@ const removeValue = (items: string[], value: string): string[] => (
 );
 
 type ClaudePermissionsProps = {
-  agent: 'claude';
+  agent: 'claude' | 'ripperdoc';
   skipPermissions: boolean;
   onSkipPermissionsChange: (value: boolean) => void;
   allowedTools: string[];
@@ -61,16 +61,33 @@ type ClaudePermissionsProps = {
 };
 
 function ClaudePermissions({
+  agent,
   skipPermissions,
   onSkipPermissionsChange,
   allowedTools,
   onAllowedToolsChange,
   disallowedTools,
   onDisallowedToolsChange,
-}: Omit<ClaudePermissionsProps, 'agent'>) {
+}: ClaudePermissionsProps) {
   const { t } = useTranslation('settings');
   const [newAllowedTool, setNewAllowedTool] = useState('');
   const [newDisallowedTool, setNewDisallowedTool] = useState('');
+  const isRipperdoc = agent === 'ripperdoc';
+  const skipPermissionStyles = isRipperdoc
+    ? {
+      iconClass: 'text-cyan-500',
+      cardClass: 'bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800',
+      checkboxClass: 'text-cyan-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-cyan-500 focus:ring-2',
+      titleClass: 'text-cyan-900 dark:text-cyan-100',
+      descriptionClass: 'text-cyan-700 dark:text-cyan-300',
+    }
+    : {
+      iconClass: 'text-orange-500',
+      cardClass: 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800',
+      checkboxClass: 'text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2',
+      titleClass: 'text-orange-900 dark:text-orange-100',
+      descriptionClass: 'text-orange-700 dark:text-orange-300',
+    };
 
   const handleAddAllowedTool = (tool: string) => {
     const updated = addUnique(allowedTools, tool);
@@ -96,23 +113,27 @@ function ClaudePermissions({
     <div className="space-y-6">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-orange-500" />
+          <AlertTriangle className={`w-5 h-5 ${skipPermissionStyles.iconClass}`} />
           <h3 className="text-lg font-medium text-foreground">{t('permissions.title')}</h3>
         </div>
-        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+        <div className={`${skipPermissionStyles.cardClass} rounded-lg p-4`}>
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
               checked={skipPermissions}
               onChange={(event) => onSkipPermissionsChange(event.target.checked)}
-              className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
+              className={`w-4 h-4 ${skipPermissionStyles.checkboxClass}`}
             />
             <div>
-              <div className="font-medium text-orange-900 dark:text-orange-100">
+              <div className={`font-medium ${skipPermissionStyles.titleClass}`}>
                 {t('permissions.skipPermissions.label')}
               </div>
-              <div className="text-sm text-orange-700 dark:text-orange-300">
-                {t('permissions.skipPermissions.claudeDescription')}
+              <div className={`text-sm ${skipPermissionStyles.descriptionClass}`}>
+                {agent === 'ripperdoc'
+                  ? t('permissions.skipPermissions.ripperdocDescription', {
+                    defaultValue: 'All tool permission prompts are skipped for Ripperdoc sessions.',
+                  })
+                  : t('permissions.skipPermissions.claudeDescription')}
               </div>
             </div>
           </label>
@@ -686,17 +707,16 @@ function GeminiPermissions({ permissionMode, onPermissionModeChange }: Omit<Gemi
 type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps | GeminiPermissionsProps;
 
 export default function PermissionsContent(props: PermissionsContentProps) {
-  if (props.agent === 'claude') {
-    return <ClaudePermissions {...props} />;
+  switch (props.agent) {
+    case 'claude':
+    case 'ripperdoc':
+      return <ClaudePermissions {...props} />;
+    case 'cursor':
+      return <CursorPermissions {...props} />;
+    case 'gemini':
+      return <GeminiPermissions {...props} />;
+    case 'codex':
+    default:
+      return <CodexPermissions {...props} />;
   }
-
-  if (props.agent === 'cursor') {
-    return <CursorPermissions {...props} />;
-  }
-
-  if (props.agent === 'gemini') {
-    return <GeminiPermissions {...props} />;
-  }
-
-  return <CodexPermissions {...props} />;
 }

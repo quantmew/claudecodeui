@@ -11,9 +11,14 @@ export default function AgentCategoryContentSection({
   onClaudePermissionsChange,
   cursorPermissions,
   onCursorPermissionsChange,
+  ripperdocPermissions,
+  onRipperdocPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  geminiPermissionMode,
+  onGeminiPermissionModeChange,
   mcpServers,
+  ripperdocMcpServers,
   cursorMcpServers,
   codexMcpServers,
   mcpTestResults,
@@ -22,6 +27,8 @@ export default function AgentCategoryContentSection({
   deleteError,
   onOpenMcpForm,
   onDeleteMcpServer,
+  onOpenRipperdocMcpForm,
+  onDeleteRipperdocMcpServer,
   onTestMcpServer,
   onDiscoverMcpTools,
   onOpenCodexMcpForm,
@@ -76,11 +83,37 @@ export default function AgentCategoryContentSection({
         />
       )}
 
+      {selectedCategory === 'permissions' && selectedAgent === 'ripperdoc' && (
+        <PermissionsContent
+          agent="ripperdoc"
+          skipPermissions={ripperdocPermissions.skipPermissions}
+          onSkipPermissionsChange={(value) => {
+            onRipperdocPermissionsChange({ ...ripperdocPermissions, skipPermissions: value });
+          }}
+          allowedTools={ripperdocPermissions.allowedTools}
+          onAllowedToolsChange={(value) => {
+            onRipperdocPermissionsChange({ ...ripperdocPermissions, allowedTools: value });
+          }}
+          disallowedTools={ripperdocPermissions.disallowedTools}
+          onDisallowedToolsChange={(value) => {
+            onRipperdocPermissionsChange({ ...ripperdocPermissions, disallowedTools: value });
+          }}
+        />
+      )}
+
       {selectedCategory === 'permissions' && selectedAgent === 'codex' && (
         <PermissionsContent
           agent="codex"
           permissionMode={codexPermissionMode}
           onPermissionModeChange={onCodexPermissionModeChange}
+        />
+      )}
+
+      {selectedCategory === 'permissions' && selectedAgent === 'gemini' && (
+        <PermissionsContent
+          agent="gemini"
+          permissionMode={geminiPermissionMode}
+          onPermissionModeChange={onGeminiPermissionModeChange}
         />
       )}
 
@@ -91,6 +124,22 @@ export default function AgentCategoryContentSection({
           onAdd={() => onOpenMcpForm()}
           onEdit={(server) => onOpenMcpForm(server)}
           onDelete={onDeleteMcpServer}
+          onTest={onTestMcpServer}
+          onDiscoverTools={onDiscoverMcpTools}
+          testResults={mcpTestResults}
+          serverTools={mcpServerTools}
+          toolsLoading={mcpToolsLoading}
+          deleteError={deleteError}
+        />
+      )}
+
+      {selectedCategory === 'mcp' && selectedAgent === 'ripperdoc' && (
+        <McpServersContent
+          agent="ripperdoc"
+          servers={ripperdocMcpServers}
+          onAdd={() => onOpenRipperdocMcpForm()}
+          onEdit={(server) => onOpenRipperdocMcpForm(server)}
+          onDelete={onDeleteRipperdocMcpServer}
           onTest={onTestMcpServer}
           onDiscoverTools={onDiscoverMcpTools}
           testResults={mcpTestResults}

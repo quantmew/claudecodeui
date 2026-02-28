@@ -18,6 +18,7 @@ type AgentVisualConfig = {
   textClass: string;
   subtextClass: string;
   buttonClass: string;
+  loginSupported?: boolean;
   description?: string;
 };
 
@@ -55,6 +56,16 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-indigo-700 dark:text-indigo-300',
     buttonClass: 'bg-indigo-600 hover:bg-indigo-700',
   },
+  ripperdoc: {
+    name: 'Ripperdoc',
+    description: 'Quantmew Ripperdoc coding agent',
+    bgClass: 'bg-cyan-50 dark:bg-cyan-900/20',
+    borderClass: 'border-cyan-200 dark:border-cyan-800',
+    textClass: 'text-cyan-900 dark:text-cyan-100',
+    subtextClass: 'text-cyan-700 dark:text-cyan-300',
+    buttonClass: 'bg-cyan-600 hover:bg-cyan-700',
+    loginSupported: false,
+  },
 };
 
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
@@ -67,7 +78,9 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
         <SessionProviderLogo provider={agent} className="w-6 h-6" />
         <div>
           <h3 className="text-lg font-medium text-foreground">{config.name}</h3>
-          <p className="text-sm text-muted-foreground">{t(`agents.account.${agent}.description`)}</p>
+          <p className="text-sm text-muted-foreground">
+            {t(`agents.account.${agent}.description`, { defaultValue: config.description || '' })}
+          </p>
         </div>
       </div>
 
@@ -107,28 +120,36 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
           </div>
 
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className={`font-medium ${config.textClass}`}>
-                  {authStatus.authenticated ? t('agents.login.reAuthenticate') : t('agents.login.title')}
+          {config.loginSupported !== false ? (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className={`font-medium ${config.textClass}`}>
+                    {authStatus.authenticated ? t('agents.login.reAuthenticate') : t('agents.login.title')}
+                  </div>
+                  <div className={`text-sm ${config.subtextClass}`}>
+                    {authStatus.authenticated
+                      ? t('agents.login.reAuthDescription')
+                      : t('agents.login.description', { agent: config.name })}
+                  </div>
                 </div>
-                <div className={`text-sm ${config.subtextClass}`}>
-                  {authStatus.authenticated
-                    ? t('agents.login.reAuthDescription')
-                    : t('agents.login.description', { agent: config.name })}
-                </div>
+                <Button
+                  onClick={onLogin}
+                  className={`${config.buttonClass} text-white`}
+                  size="sm"
+                >
+                  <LogIn className="w-4 h-4 mr-2" />
+                  {authStatus.authenticated ? t('agents.login.reLoginButton') : t('agents.login.button')}
+                </Button>
               </div>
-              <Button
-                onClick={onLogin}
-                className={`${config.buttonClass} text-white`}
-                size="sm"
-              >
-                <LogIn className="w-4 h-4 mr-2" />
-                {authStatus.authenticated ? t('agents.login.reLoginButton') : t('agents.login.button')}
-              </Button>
             </div>
-          </div>
+          ) : (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div className={`text-sm ${config.subtextClass}`}>
+                Ripperdoc does not require a dedicated web login flow in this UI.
+              </div>
+            </div>
+          )}
 
           {authStatus.error && (
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4">

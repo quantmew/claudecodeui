@@ -6,6 +6,7 @@ import { promises as fs } from 'fs';
 import { extractProjectDirectory } from '../projects.js';
 import { queryClaudeSDK } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
+import { spawnRipperdoc } from '../ripperdoc-cli.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -559,8 +560,8 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 
   // Validate provider
-  if (!['claude', 'cursor'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
+  if (!['claude', 'cursor', 'ripperdoc'].includes(provider)) {
+    return res.status(400).json({ error: 'provider must be "claude", "cursor", or "ripperdoc"' });
   }
 
   try {
@@ -613,10 +614,10 @@ router.post('/generate-commit-message', async (req, res) => {
 });
 
 /**
- * Generates a commit message using AI (Claude SDK or Cursor CLI)
+ * Generates a commit message using AI (Claude SDK, Cursor CLI, or Ripperdoc CLI)
  * @param {Array<string>} files - List of changed files
  * @param {string} diffContext - Git diff content
- * @param {string} provider - 'claude' or 'cursor'
+ * @param {string} provider - 'claude', 'cursor', or 'ripperdoc'
  * @param {string} projectPath - Project directory path
  * @returns {Promise<string>} Generated commit message
  */
@@ -697,6 +698,11 @@ Generate the commit message:`;
       await spawnCursor(prompt, {
         cwd: projectPath,
         skipPermissions: true
+      }, writer);
+    } else if (provider === 'ripperdoc') {
+      await spawnRipperdoc(prompt, {
+        cwd: projectPath,
+        permissionMode: 'bypassPermissions',
       }, writer);
     }
 

@@ -30,11 +30,11 @@ const maskSecret = (value: unknown): string => {
 };
 
 type ClaudeMcpServersProps = {
-  agent: 'claude';
+  agent: 'claude' | 'ripperdoc';
   servers: McpServer[];
   onAdd: () => void;
   onEdit: (server: McpServer) => void;
-  onDelete: (serverId: string, scope?: string) => void;
+  onDelete: (serverId: string, scope?: string, projectPath?: string) => void;
   onTest: (serverId: string, scope?: string) => void;
   onDiscoverTools: (serverId: string, scope?: string) => void;
   testResults: Record<string, McpTestResult>;
@@ -44,6 +44,7 @@ type ClaudeMcpServersProps = {
 };
 
 function ClaudeMcpServers({
+  agent,
   servers,
   onAdd,
   onEdit,
@@ -51,19 +52,30 @@ function ClaudeMcpServers({
   testResults,
   serverTools,
   deleteError,
-}: Omit<ClaudeMcpServersProps, 'agent' | 'onTest' | 'onDiscoverTools' | 'toolsLoading'>) {
+}: Omit<ClaudeMcpServersProps, 'onTest' | 'onDiscoverTools' | 'toolsLoading'>) {
   const { t } = useTranslation('settings');
+  const isRipperdoc = agent === 'ripperdoc';
+  const headingClass = isRipperdoc ? 'text-cyan-500' : 'text-purple-500';
+  const buttonClass = isRipperdoc
+    ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+    : 'bg-purple-600 hover:bg-purple-700 text-white';
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Server className="w-5 h-5 text-purple-500" />
+        <Server className={`w-5 h-5 ${headingClass}`} />
         <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
       </div>
-      <p className="text-sm text-muted-foreground">{t('mcpServers.description.claude')}</p>
+      <p className="text-sm text-muted-foreground">
+        {isRipperdoc
+          ? t('mcpServers.description.ripperdoc', {
+            defaultValue: 'Manage Ripperdoc MCP servers from ~/.ripperdoc/mcp.json and project .ripperdoc/mcp.json files.',
+          })
+          : t('mcpServers.description.claude')}
+      </p>
 
       <div className="flex justify-between items-center">
-        <Button onClick={onAdd} className="bg-purple-600 hover:bg-purple-700 text-white" size="sm">
+        <Button onClick={onAdd} className={buttonClass} size="sm">
           <Plus className="w-4 h-4 mr-2" />
           {t('mcpServers.addButton')}
         </Button>
@@ -163,7 +175,7 @@ function ClaudeMcpServers({
                     <Edit3 className="w-4 h-4" />
                   </Button>
                   <Button
-                    onClick={() => onDelete(serverId, server.scope)}
+                    onClick={() => onDelete(serverId, server.scope, server.projectPath)}
                     variant="ghost"
                     size="sm"
                     className="text-red-600 hover:text-red-700"
@@ -370,7 +382,7 @@ function CodexMcpServers({ servers, onAdd, onEdit, onDelete, deleteError }: Omit
 type McpServersContentProps = ClaudeMcpServersProps | CursorMcpServersProps | CodexMcpServersProps;
 
 export default function McpServersContent(props: McpServersContentProps) {
-  if (props.agent === 'claude') {
+  if (props.agent === 'claude' || props.agent === 'ripperdoc') {
     return <ClaudeMcpServers {...props} />;
   }
 

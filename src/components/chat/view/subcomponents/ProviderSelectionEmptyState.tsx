@@ -3,7 +3,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import NextTaskBanner from '../../../NextTaskBanner.jsx';
-import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS } from '../../../../../shared/modelConstants';
+import { CLAUDE_MODELS, CURSOR_MODELS, CODEX_MODELS, GEMINI_MODELS, RIPPERDOC_MODELS } from '../../../../../shared/modelConstants';
 import type { ProjectSession, SessionProvider } from '../../../../types/app';
 
 interface ProviderSelectionEmptyStateProps {
@@ -20,6 +20,8 @@ interface ProviderSelectionEmptyStateProps {
   setCodexModel: (model: string) => void;
   geminiModel: string;
   setGeminiModel: (model: string) => void;
+  ripperdocModel: string;
+  setRipperdocModel: (model: string) => void;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -68,19 +70,29 @@ const PROVIDERS: ProviderDef[] = [
     ring: 'ring-blue-500/15',
     check: 'bg-blue-500 text-white',
   },
+  {
+    id: 'ripperdoc',
+    name: 'Ripperdoc',
+    infoKey: 'providerSelection.providerInfo.ripperdoc',
+    accent: 'border-slate-600 dark:border-slate-300',
+    ring: 'ring-slate-500/15',
+    check: 'bg-slate-700 dark:bg-slate-300 text-white dark:text-slate-900',
+  },
 ];
 
 function getModelConfig(p: SessionProvider) {
   if (p === 'claude') return CLAUDE_MODELS;
   if (p === 'codex') return CODEX_MODELS;
   if (p === 'gemini') return GEMINI_MODELS;
+  if (p === 'ripperdoc') return RIPPERDOC_MODELS;
   return CURSOR_MODELS;
 }
 
-function getModelValue(p: SessionProvider, c: string, cu: string, co: string, g: string) {
+function getModelValue(p: SessionProvider, c: string, cu: string, co: string, g: string, r: string) {
   if (p === 'claude') return c;
   if (p === 'codex') return co;
   if (p === 'gemini') return g;
+  if (p === 'ripperdoc') return r;
   return cu;
 }
 
@@ -98,6 +110,8 @@ export default function ProviderSelectionEmptyState({
   setCodexModel,
   geminiModel,
   setGeminiModel,
+  ripperdocModel,
+  setRipperdocModel,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -116,11 +130,12 @@ export default function ProviderSelectionEmptyState({
     if (provider === 'claude') { setClaudeModel(value); localStorage.setItem('claude-model', value); }
     else if (provider === 'codex') { setCodexModel(value); localStorage.setItem('codex-model', value); }
     else if (provider === 'gemini') { setGeminiModel(value); localStorage.setItem('gemini-model', value); }
+    else if (provider === 'ripperdoc') { setRipperdocModel(value); localStorage.setItem('ripperdoc-model', value); }
     else { setCursorModel(value); localStorage.setItem('cursor-model', value); }
   };
 
   const modelConfig = getModelConfig(provider);
-  const currentModel = getModelValue(provider, claudeModel, cursorModel, codexModel, geminiModel);
+  const currentModel = getModelValue(provider, claudeModel, cursorModel, codexModel, geminiModel, ripperdocModel);
 
   /* ── New session — provider picker ── */
   if (!selectedSession && !currentSessionId) {
@@ -138,7 +153,7 @@ export default function ProviderSelectionEmptyState({
           </div>
 
           {/* Provider cards — horizontal row, equal width */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5 mb-6">
             {PROVIDERS.map((p) => {
               const active = provider === p.id;
               return (
@@ -161,7 +176,9 @@ export default function ProviderSelectionEmptyState({
                   />
                   <div className="text-center">
                     <p className="text-[13px] font-semibold text-foreground leading-none">{p.name}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{t(p.infoKey)}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                      {t(p.infoKey, { defaultValue: p.id === 'ripperdoc' ? 'by Quantmew' : '' })}
+                    </p>
                   </div>
                   {/* Check badge */}
                   {active && (
@@ -200,6 +217,7 @@ export default function ProviderSelectionEmptyState({
                   cursor: t('providerSelection.readyPrompt.cursor', { model: cursorModel }),
                   codex: t('providerSelection.readyPrompt.codex', { model: codexModel }),
                   gemini: t('providerSelection.readyPrompt.gemini', { model: geminiModel }),
+                  ripperdoc: t('providerSelection.readyPrompt.ripperdoc', { model: ripperdocModel, defaultValue: `Ready to use Ripperdoc with ${ripperdocModel}. Start typing your message below.` }),
                 }[provider]
               }
             </p>

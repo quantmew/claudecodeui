@@ -84,3 +84,21 @@ export const GEMINI_MODELS = {
 
   DEFAULT: 'gemini-2.5-flash'
 };
+
+/**
+ * Ripperdoc Models
+ *
+ * Ripperdoc supports model pointers and provider-specific model ids.
+ * Keep a curated shortlist for quick selection in the UI.
+ */
+export const RIPPERDOC_MODELS = {
+  OPTIONS: [
+    { value: 'main', label: 'Main (Pointer)' },
+    { value: 'quick', label: 'Quick (Pointer)' },
+    { value: 'default', label: 'Default (Profile)' },
+    { value: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' }
+  ],
+
+  DEFAULT: 'main'
+};

@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 
 export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'tasks';
-export type AgentProvider = 'claude' | 'cursor' | 'codex' | 'gemini';
+export type AgentProvider = 'claude' | 'cursor' | 'codex' | 'gemini' | 'ripperdoc';
 export type AgentCategory = 'account' | 'permissions' | 'mcp';
 export type ProjectSortOrder = 'name' | 'date';
 export type SaveStatus = 'success' | 'error' | null;
@@ -108,6 +108,12 @@ export type ClaudePermissionsState = {
 export type CursorPermissionsState = {
   allowedCommands: string[];
   disallowedCommands: string[];
+  skipPermissions: boolean;
+};
+
+export type RipperdocPermissionsState = {
+  allowedTools: string[];
+  disallowedTools: string[];
   skipPermissions: boolean;
 };
 
